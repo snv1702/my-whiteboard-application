@@ -176,3 +176,44 @@
     border: 1px solid #c3e6cb;
     border-radius: 5px;
 }
+
+.canvas-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    cursor: pointer;
+    flex: 1;
+}
+
+.canvas-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.canvas-badge-owner {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #a5d6a7;
+}
+
+.canvas-badge-shared {
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border: 1px solid #90caf9;
+}
+
+.shared-notice {
+    font-size: 0.85rem;
+    color: #555;
+    padding: 8px 12px;
+    background: #f0f7ff;
+    border-radius: 6px;
+    border: 1px dashed #007bff;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+}

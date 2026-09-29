@@ -151,3 +151,92 @@ export const getSvgPathFromStroke = (stroke) => {
   d.push("Z");
   return d.join(" ");
 };
+
+export const rehydrateElement = (element) => {
+  if (!element) return element;
+  const { id, x1, y1, x2, y2, type, stroke, fill, size, text, points } = element;
+
+  if (type === TOOL_ITEMS.BRUSH) {
+    return {
+      ...element,
+      points: points || [],
+    };
+  }
+
+  if (type === TOOL_ITEMS.TEXT) {
+    return {
+      ...element,
+      text: text || "",
+    };
+  }
+
+  if (element.roughEle && typeof element.roughEle === "object" && element.roughEle.shape) {
+    return element;
+  }
+
+  let options = {
+    seed: (id || 0) + 1,
+    fillStyle: "solid",
+  };
+  if (stroke) options.stroke = stroke;
+  if (fill) options.fill = fill;
+  if (size) options.strokeWidth = size;
+
+  let roughEle = null;
+  switch (type) {
+    case TOOL_ITEMS.LINE:
+      roughEle = gen.line(x1, y1, x2, y2, options);
+      break;
+    case TOOL_ITEMS.RECTANGLE:
+      roughEle = gen.rectangle(x1, y1, x2 - x1, y2 - y1, options);
+      break;
+    case TOOL_ITEMS.CIRCLE: {
+      const cx = (x1 + x2) / 2;
+      const cy = (y1 + y2) / 2;
+      const width = x2 - x1;
+      const height = y2 - y1;
+      roughEle = gen.ellipse(cx, cy, width, height, options);
+      break;
+    }
+    case TOOL_ITEMS.ARROW: {
+      const { x3, y3, x4, y4 } = getArrowHeadsCoordinates(
+        x1,
+        y1,
+        x2,
+        y2,
+        ARROW_LENGTH
+      );
+      const arrowPoints = [
+        [x1, y1],
+        [x2, y2],
+        [x3, y3],
+        [x2, y2],
+        [x4, y4],
+      ];
+      roughEle = gen.linearPath(arrowPoints, options);
+      break;
+    }
+    default:
+      break;
+  }
+
+  return {
+    ...element,
+    roughEle,
+  };
+};
+
+export const cleanElementForTransmission = (element) => {
+  if (!element) return element;
+  const { id, x1, y1, x2, y2, type, stroke, fill, size, text, points } = element;
+  const clean = { id, type, stroke };
+  if (x1 !== undefined) clean.x1 = x1;
+  if (y1 !== undefined) clean.y1 = y1;
+  if (x2 !== undefined) clean.x2 = x2;
+  if (y2 !== undefined) clean.y2 = y2;
+  if (fill !== undefined) clean.fill = fill;
+  if (size !== undefined) clean.size = size;
+  if (text !== undefined) clean.text = text;
+  if (points !== undefined) clean.points = points;
+  return clean;
+};

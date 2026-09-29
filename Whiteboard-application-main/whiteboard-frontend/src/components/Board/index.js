@@ -4,20 +4,19 @@ import boardContext from "../../store/board-context";
 import { TOOL_ACTION_TYPES, TOOL_ITEMS } from "../../constants";
 import toolboxContext from "../../store/toolbox-context";
 import socket from "../../utils/socket";
-
-import classes from "./index.module.css";
-
+import { loadCanvas as apiLoadCanvas } from "../../utils/api";
 import {
   getSvgPathFromStroke,
+  rehydrateElement,
+  cleanElementForTransmission,
 } from "../../utils/element";
 import getStroke from "perfect-freehand";
-import axios from "axios";
-
+import classes from "./index.module.css";
 
 function Board({ id }) {
   const canvasRef = useRef();
   const textAreaRef = useRef();
-  console.log(id)
+  const isRemoteUpdateRef = useRef(false);
 
   const {
     elements,
@@ -30,69 +29,116 @@ function Board({ id }) {
     redo,
     setCanvasId,
     setElements,
-    setHistory
+    setHistory,
   } = useContext(boardContext);
   const { toolboxState } = useContext(toolboxContext);
 
-  const token = localStorage.getItem("whiteboard_user_token");
-
   const [isAuthorized, setIsAuthorized] = useState(true);
 
+  // Resize canvas to window dimensions
   useEffect(() => {
-    if (id) {
-      // Join the canvas room (no need for userId)
-      socket.emit("joinCanvas", { canvasId: id });
+    const handleResize = () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
-      // Listen for updates from other users
-      socket.on("receiveDrawingUpdate", (updatedElements) => {
-        setElements(updatedElements);
-      });
-
-      // Load initial canvas data
-      socket.on("loadCanvas", (initialElements) => {
-        setElements(initialElements);
-      });
-
-      socket.on("unauthorized", (data) => {
-        console.log(data.message);
-        alert("Access Denied: You cannot edit this canvas.");
-        setIsAuthorized(false);
-      });
-
-      return () => {
-        socket.off("receiveDrawingUpdate");
-        socket.off("loadCanvas");
-        socket.off("unauthorized");
-      };
-    }
-  }, [id, setElements]);
-
+  // Real-time Socket.IO room joining and event handling
   useEffect(() => {
-    const fetchCanvasData = async () => {
-      if (id && token) {
-        try {
-          const response = await axios.get(`https://my-whiteboard-application.onrender.com-az.onrender.com/api/canvas/load/${id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          setCanvasId(id); // Set the current canvas ID
-          setElements(response.data.elements); // Set the fetched elements
-          setHistory(response.data.elements); // Set the fetched elements
-        } catch (error) {
-          console.error("Error loading canvas:", error);
-        } finally {
-        }
+    if (!id) return;
+
+    setIsAuthorized(true);
+    setCanvasId(id);
+
+    const token = localStorage.getItem("whiteboard_user_token");
+
+    // Join the canvas room
+    socket.emit("joinCanvas", { canvasId: id, token });
+
+    // Listen for real-time updates from other collaborators
+    const handleDrawingUpdate = (updatedElements) => {
+      if (Array.isArray(updatedElements)) {
+        isRemoteUpdateRef.current = true;
+        const rehydrated = updatedElements.map(rehydrateElement);
+        setElements(rehydrated);
       }
     };
 
-    fetchCanvasData();
-  }, [id, token, setCanvasId, setElements, setHistory]);
+    // Listen for canvas load data from socket
+    const handleLoadCanvas = (initialElements) => {
+      if (Array.isArray(initialElements)) {
+        isRemoteUpdateRef.current = true;
+        const rehydrated = initialElements.map(rehydrateElement);
+        setElements(rehydrated);
+        setHistory(rehydrated);
+      }
+    };
 
+    const handleUnauthorized = (data) => {
+      console.warn("Unauthorized socket access:", data?.message);
+      setIsAuthorized(false);
+      alert(data?.message || "Access Denied: You cannot view or edit this canvas.");
+    };
+
+    const handleConnect = () => {
+      socket.emit("joinCanvas", {
+        canvasId: id,
+        token: localStorage.getItem("whiteboard_user_token"),
+      });
+    };
+
+    socket.on("receiveDrawingUpdate", handleDrawingUpdate);
+    socket.on("loadCanvas", handleLoadCanvas);
+    socket.on("unauthorized", handleUnauthorized);
+    socket.on("connect", handleConnect);
+
+    // Initial load from HTTP API to ensure fastest initial render
+    apiLoadCanvas(id)
+      .then((data) => {
+        if (data && Array.isArray(data.elements)) {
+          isRemoteUpdateRef.current = true;
+          const rehydrated = data.elements.map(rehydrateElement);
+          setElements(rehydrated);
+          setHistory(rehydrated);
+        }
+      })
+      .catch((err) => {
+        if (err.response && (err.response.status === 403 || err.response.status === 401)) {
+          setIsAuthorized(false);
+        }
+      });
+
+    return () => {
+      socket.emit("leaveCanvas", { canvasId: id });
+      socket.off("receiveDrawingUpdate", handleDrawingUpdate);
+      socket.off("loadCanvas", handleLoadCanvas);
+      socket.off("unauthorized", handleUnauthorized);
+      socket.off("connect", handleConnect);
+    };
+  }, [id, setCanvasId, setElements, setHistory]);
+
+  // Synchronize local changes to Socket.IO room in real-time
   useEffect(() => {
-    const canvas = canvasRef.current;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }, []);
+    if (!id || !isAuthorized) return;
 
+    if (isRemoteUpdateRef.current) {
+      // Change was received from a remote collaborator or initial load; don't broadcast back
+      isRemoteUpdateRef.current = false;
+      return;
+    }
+
+    // Local change (drawing, move, mouseup, eraser, text, undo, redo)
+    const cleaned = elements.map(cleanElementForTransmission);
+    socket.emit("drawingUpdate", { canvasId: id, elements: cleaned });
+  }, [elements, id, isAuthorized]);
+
+  // Keyboard shortcuts for Undo (Ctrl+Z) and Redo (Ctrl+Y)
   useEffect(() => {
     function handleKeyDown(event) {
       if (event.ctrlKey && event.key === "z") {
@@ -103,14 +149,15 @@ function Board({ id }) {
     }
 
     document.addEventListener("keydown", handleKeyDown);
-
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [undo, redo]);
 
+  // Canvas rendering
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas) return;
     const context = canvas.getContext("2d");
     context.save();
 
@@ -121,24 +168,37 @@ function Board({ id }) {
         case TOOL_ITEMS.LINE:
         case TOOL_ITEMS.RECTANGLE:
         case TOOL_ITEMS.CIRCLE:
-        case TOOL_ITEMS.ARROW:
-          roughCanvas.draw(element.roughEle);
+        case TOOL_ITEMS.ARROW: {
+          let roughEle = element.roughEle;
+          if (!roughEle || !roughEle.shape) {
+            const rehydrated = rehydrateElement(element);
+            roughEle = rehydrated.roughEle;
+            element.roughEle = roughEle;
+          }
+          if (roughEle) {
+            roughCanvas.draw(roughEle);
+          }
           break;
+        }
         case TOOL_ITEMS.BRUSH:
-          context.fillStyle = element.stroke;
-          const path = new Path2D(getSvgPathFromStroke(getStroke(element.points)));
-          context.fill(path);
-          context.restore();
+          if (element.points && element.points.length > 0) {
+            context.fillStyle = element.stroke || "#000000";
+            const path = new Path2D(getSvgPathFromStroke(getStroke(element.points)));
+            context.fill(path);
+            context.restore();
+            context.save();
+          }
           break;
         case TOOL_ITEMS.TEXT:
           context.textBaseline = "top";
-          context.font = `${element.size}px Caveat`;
-          context.fillStyle = element.stroke;
-          context.fillText(element.text, element.x1, element.y1);
+          context.font = `${element.size || 32}px Caveat, sans-serif`;
+          context.fillStyle = element.stroke || "#000000";
+          context.fillText(element.text || "", element.x1, element.y1);
           context.restore();
+          context.save();
           break;
         default:
-          throw new Error("Type not recognized");
+          break;
       }
     });
 
@@ -147,17 +207,14 @@ function Board({ id }) {
     };
   }, [elements]);
 
-
   useEffect(() => {
     const textarea = textAreaRef.current;
-    if (toolActionType === TOOL_ACTION_TYPES.WRITING) {
+    if (toolActionType === TOOL_ACTION_TYPES.WRITING && textarea) {
       setTimeout(() => {
         textarea.focus();
       }, 0);
     }
   }, [toolActionType]);
-
-  // console.log("Elements ",elements);
 
   const handleMouseDown = (event) => {
     if (!isAuthorized) return;
@@ -167,27 +224,25 @@ function Board({ id }) {
   const handleMouseMove = (event) => {
     if (!isAuthorized) return;
     boardMouseMoveHandler(event);
-    socket.emit("drawingUpdate", { canvasId: id, elements });
   };
 
   const handleMouseUp = () => {
     if (!isAuthorized) return;
     boardMouseUpHandler();
-    socket.emit("drawingUpdate", { canvasId: id, elements });
   };
 
   return (
     <>
-      {toolActionType === TOOL_ACTION_TYPES.WRITING && (
+      {toolActionType === TOOL_ACTION_TYPES.WRITING && elements.length > 0 && (
         <textarea
           type="text"
           ref={textAreaRef}
           className={classes.textElementBox}
           style={{
-            top: elements[elements.length - 1].y1,
-            left: elements[elements.length - 1].x1,
-            fontSize: `${elements[elements.length - 1]?.size}px`,
-            color: elements[elements.length - 1]?.stroke,
+            top: elements[elements.length - 1]?.y1 || 0,
+            left: elements[elements.length - 1]?.x1 || 0,
+            fontSize: `${elements[elements.length - 1]?.size || 32}px`,
+            color: elements[elements.length - 1]?.stroke || "#000000",
           }}
           onBlur={(event) => textAreaBlurHandler(event.target.value)}
         />

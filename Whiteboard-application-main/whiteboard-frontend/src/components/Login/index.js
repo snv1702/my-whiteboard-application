@@ -1,42 +1,58 @@
-import React, { useState, useContext } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import styles from './index.module.css';
-import boardContext from '../../store/board-context';
+import React, { useState, useContext } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import styles from "./index.module.css";
+import boardContext from "../../store/board-context";
+import { loginUser } from "../../utils/api";
+import { reconnectSocketWithAuth } from "../../utils/socket";
 
 const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const navigate = useNavigate();
-  const { isUserLoggedIn,setUserLoginStatus } = useContext(boardContext);
+  const { setUserLoginStatus } = useContext(boardContext);
 
-  console.log(isUserLoggedIn);
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
+    setLoading(true);
+
     try {
-      const response = await fetch('https://my-whiteboard-application.onrender.com/api/users/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-      if (response.ok) {
-        localStorage.setItem('whiteboard_user_token', data.token);
+      const data = await loginUser(email.trim(), password);
+
+      if (data && data.token) {
+        localStorage.setItem("whiteboard_user_token", data.token);
+        if (data.user) {
+          localStorage.setItem("whiteboard_user_email", data.user.email);
+          localStorage.setItem("whiteboard_user_id", data.user.id);
+        }
         setUserLoginStatus(true);
-        navigate('/');
+        reconnectSocketWithAuth();
+        navigate("/");
       } else {
-        alert(data.message || 'Login failed');
+        setErrorMsg(data.error || data.message || "Login failed");
       }
     } catch (error) {
-      console.error('Login error:', error);
-      alert('An error occurred during login');
+      console.error("Login error:", error);
+      const msg =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        "An error occurred during login. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className={styles.loginContainer}>
       <h2>Login</h2>
+      {errorMsg && (
+        <div style={{ color: "#e74c3c", marginBottom: "15px", fontSize: "14px" }}>
+          {errorMsg}
+        </div>
+      )}
       <form onSubmit={handleSubmit} className={styles.loginForm}>
         <input
           type="email"
@@ -44,6 +60,7 @@ const Login = () => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          disabled={loading}
         />
         <input
           type="password"
@@ -51,8 +68,11 @@ const Login = () => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          disabled={loading}
         />
-        <button type="submit">Login</button>
+        <button type="submit" disabled={loading}>
+          {loading ? "Logging in..." : "Login"}
+        </button>
       </form>
       <p>
         Don't have an account? <Link to="/register">Register here</Link>

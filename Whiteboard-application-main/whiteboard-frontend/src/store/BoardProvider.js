@@ -159,6 +159,7 @@ const boardReducer = (state, action) => {
         ...state,
         elements: action.payload.elements,
         history: [action.payload.elements], 
+        index: 0,
       };
     }
     case BOARD_ACTIONS.SET_CANVAS_ID:
@@ -176,6 +177,7 @@ const boardReducer = (state, action) => {
       return {
         ...state,
         history: [action.payload.elements],
+        index: 0,
       };
 
     case BOARD_ACTIONS.SET_USER_LOGIN_STATUS:

@@ -1,7 +1,7 @@
 const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 
-const SECRET_KEY = "your_secret_key"; // Replace with a secure key
+const SECRET_KEY = process.env.JWT_SECRET || "your_secret_key";
 
 // Register User
 exports.registerUser = async (req, res) => {
@@ -9,15 +9,16 @@ exports.registerUser = async (req, res) => {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ error: "All fields are required" });
+            return res.status(400).json({ error: "Email and password are required" });
         }
 
-        const existingUser = await User.findOne({ email });
+        const normalizedEmail = email.trim().toLowerCase();
+        const existingUser = await User.findOne({ email: normalizedEmail });
         if (existingUser) {
-            return res.status(400).json({ error: "User already exists" });
+            return res.status(400).json({ error: "User already exists with this email" });
         }
 
-        const newUser = new User({ email, password });
+        const newUser = new User({ email: normalizedEmail, password });
         await newUser.save();
 
         res.status(201).json({ message: "User registered successfully!" });
@@ -31,7 +32,12 @@ exports.loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        const user = await User.findOne({ email });
+        if (!email || !password) {
+            return res.status(400).json({ error: "Email and password are required" });
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+        const user = await User.findOne({ email: normalizedEmail });
         if (!user) return res.status(400).json({ error: "Invalid credentials" });
 
         const isMatch = await user.comparePassword(password);
@@ -39,7 +45,14 @@ exports.loginUser = async (req, res) => {
 
         const token = jwt.sign({ userId: user._id }, SECRET_KEY, { expiresIn: "7d" });
 
-        res.json({ message: "Login successful", token });
+        res.json({
+            message: "Login successful",
+            token,
+            user: {
+                id: user._id,
+                email: user.email,
+            },
+        });
     } catch (error) {
         res.status(500).json({ error: "Login failed", details: error.message });
     }

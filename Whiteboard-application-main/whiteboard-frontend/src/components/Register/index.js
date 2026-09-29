@@ -1,43 +1,56 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import styles from './index.module.css';
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import styles from "./index.module.css";
+import { registerUser } from "../../utils/api";
 
 const Register = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
+
     if (password !== confirmPassword) {
-      alert("Passwords don't match");
+      setErrorMsg("Passwords do not match");
       return;
     }
+
+    if (password.length < 6) {
+      setErrorMsg("Password must be at least 6 characters");
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const response = await fetch('https://my-whiteboard-application.onrender.com/api/users/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-      if (response.ok) {
-        alert('Registration successful');
-        navigate('/login');
-      } else {
-        alert(data.message || 'Registration failed');
-      }
+      const data = await registerUser(email.trim(), password);
+      alert(data.message || "Registration successful! Please login.");
+      navigate("/login");
     } catch (error) {
-      console.error('Registration error:', error);
-      alert('An error occurred during registration');
+      console.error("Registration error:", error);
+      const msg =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        "An error occurred during registration. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className={styles.registerContainer}>
       <h2>Register</h2>
+      {errorMsg && (
+        <div style={{ color: "#e74c3c", marginBottom: "15px", fontSize: "14px" }}>
+          {errorMsg}
+        </div>
+      )}
       <form onSubmit={handleSubmit} className={styles.registerForm}>
         <input
           type="email"
@@ -45,6 +58,7 @@ const Register = () => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          disabled={loading}
         />
         <input
           type="password"
@@ -52,6 +66,7 @@ const Register = () => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          disabled={loading}
         />
         <input
           type="password"
@@ -59,8 +74,11 @@ const Register = () => {
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
+          disabled={loading}
         />
-        <button type="submit">Register</button>
+        <button type="submit" disabled={loading}>
+          {loading ? "Registering..." : "Register"}
+        </button>
       </form>
       <p>
         Already have an account? <Link to="/login">Login here</Link>
