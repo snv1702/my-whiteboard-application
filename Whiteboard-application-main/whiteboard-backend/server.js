@@ -16,7 +16,14 @@ const canvasRoutes = require("./routes/canvasRoutes");
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://my-whiteboard-application.vercel.app",
+    "https://my-whiteboard-application-cqkjmmf9v-saanvi18.vercel.app"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(express.json());
 
 // Routes
@@ -29,8 +36,11 @@ connectToDB();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-      origin: ["http://localhost:3000", "https://whiteboard-tutorial-eight.vercel.app"], 
-      methods: ["GET", "POST"],
+origin: [
+  "http://localhost:3000",
+  "https://my-whiteboard-application.vercel.app",
+  "https://my-whiteboard-application-cqkjmmf9v-saanvi18.vercel.app"
+],      methods: ["GET", "POST"],
     },
   });
 
