@@ -17,19 +17,20 @@ const Sidebar = () => {
 
   const { id } = useParams(); 
 
+
   useEffect(() => {
     if (!isUserLoggedIn) return;
 
     const loadCanvases = async () => {
       try {
-        const response = await axios.get('https://my-whiteboard-application.onrender.com-az.onrender.com/api/canvas/list', {
+        const response = await axios.get('https://my-whiteboard-application.onrender.com/api/canvas/list', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setCanvases(response.data);
 
         if (response.data.length === 0) {
           const createResponse = await axios.post(
-            'https://my-whiteboard-application.onrender.com-az.onrender.com/api/canvas/create',
+            'https://my-whiteboard-application.onrender.com/api/canvas/create',
             {},
             { headers: { Authorization: `Bearer ${token}` } }
           );
@@ -49,7 +50,7 @@ const Sidebar = () => {
 
   const fetchCanvases = async () => {
     try {
-      const response = await axios.get('https://my-whiteboard-application.onrender.com-az.onrender.com/api/canvas/list', {
+      const response = await axios.get('https://my-whiteboard-application.onrender.com/api/canvas/list', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setCanvases(response.data);
@@ -74,7 +75,7 @@ const Sidebar = () => {
 
   const handleCreateCanvas = async () => {
     try {
-      const response = await axios.post('https://my-whiteboard-application.onrender.com-az.onrender.com/api/canvas/create', {}, {
+      const response = await axios.post('https://my-whiteboard-application.onrender.com/api/canvas/create', {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       console.log(response.data)  
@@ -89,7 +90,7 @@ const Sidebar = () => {
 
   const handleDeleteCanvas = async (id) => {
     try {
-      await axios.delete(`https://my-whiteboard-application.onrender.com-az.onrender.com/api/canvas/delete/${id}`, {
+      await axios.delete(`https://my-whiteboard-application.onrender.com/api/canvas/delete/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchCanvases();
@@ -126,7 +127,7 @@ const Sidebar = () => {
       setSuccess(""); // Clear previous success message
 
       const response = await axios.put(
-        `https://my-whiteboard-application.onrender.com/api/canvas/share/${Id},
+        `https://my-whiteboard-application.onrender.com/api/canvas/share/${id}`,
         { email },
         {
           headers: { Authorization: `Bearer ${token}` },
