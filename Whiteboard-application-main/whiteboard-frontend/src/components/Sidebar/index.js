@@ -127,7 +127,7 @@ const Sidebar = () => {
       setSuccess(""); // Clear previous success message
 
       const response = await axios.put(
-        `https://my-whiteboard-application.onrender.com/api/canvas/share/${id}`,
+        `https://my-whiteboard-application.onrender.com/api/canvas/share/${canvasId}`,
         { email },
         {
           headers: { Authorization: `Bearer ${token}` },
